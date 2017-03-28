@@ -248,6 +248,138 @@ def main():
 				mgf_output.write('END IONS\n')
 			mgf_output.close()
 		sys.stdout.write('done!\n')
+		
+		
+		
+		
+		
+		
+		
+		
+		#Next code can be used to write a minimal msp file for the Quickmod spectral library search engine
+		msp = True # prevent writing big msp files
+		
+		
+		if msp:
+			sys.stdout.write('\nwriting msp file...\n')
+			msp_output = open(args.pep_file +'_predictions.msp', 'w+')
+
+			for sp in all_preds.spec_id.unique():
+				sequence = data.loc[int(sp)-1, "peptide"]
+				tmp = all_preds[all_preds.spec_id == sp]
+				tmp = tmp.sort_values('mz')
+				msp_output.write('Name: ' + sequence + "/" + str(int(tmp.charge[0])) + '\n')
+				from pyteomics import mass
+				msp_output.write('MW: %f\n' % (mass.calculate_mass(sequence=sequence)))
+				msp_output.write('Comment: ')
+
+				for i in data.loc[int(sp)-1:int(sp)-1,"modifications"]:
+					pipes = 0
+					if str(i) == "nan":
+						pipes=0
+					else:
+						for j in i:
+							if j == "|":
+								pipes += 1
+					if pipes == 0:
+						modamount=0
+					else:
+						pipes += 1
+						modamount=pipes/2
+
+						import re
+
+						modplace_compile = re.compile("\d+")
+						modplace_findall = modplace_compile.findall(str(i))
+
+						modtype_compile = re.compile("[CO]")
+						modtype_findall = modtype_compile.findall(str(i))
+
+						modplace = modplace_findall
+						modtype = modtype_findall
+
+					mods = "Mods=%d" % (modamount)
+
+					for i in range(modamount):
+						mods += "/"
+						mods += modplace[i]
+						mods += ","
+
+						if modtype[i] == "C":
+							mods += "C"
+							mods += ","
+							mods += "Carbamidomethyl"
+						elif modtype[i] == "O":
+							mods += "M"
+							mods += ","
+							mods += "Oxidation"
+
+					msp_output.write(mods)
+					msp_output.write(" Parent=" +  str(mass.calculate_mass(sequence=sequence)) + '\n')
+					numpeaks = 0
+					spectralpeaks = []
+
+					normalizedpeaks = []
+
+					for i in range(len(tmp)):
+						normalizedpeak = 2**float(str(tmp["prediction"][i]))
+						normalizedpeaks.append(normalizedpeak)
+
+					maxpeak = max(normalizedpeaks)
+
+					rescaledpeaks = []
+
+					for i in normalizedpeaks:
+						rescaledpeak = (float(i)/maxpeak)*10000
+						rescaledpeaks.append(int(rescaledpeak))
+
+
+					for i in range(len(tmp)):
+						numpeaks += 1
+						spectralpeaks.append(str(tmp["mz"][i]) + '\t' + str(rescaledpeaks[i]) + "\t" + "\"?\"" + "\n")
+
+					peakonly_list = []
+
+					import re
+					compile_peak = re.compile("\d+[.]\d+")
+
+					for i in spectralpeaks:
+						peaksearch = compile_peak.search(i)
+						peak = peaksearch.group()
+						peakonly_list.append(float(peak))
+
+					ranked_list = sorted(peakonly_list)
+					rankedpeaklist= []
+
+					for j in ranked_list:
+						for i in spectralpeaks:
+							peaksearch = compile_peak.search(i)
+							peak = peaksearch.group()
+							if float(peak) == float(j):
+								rankedpeaklist.append(i)
+
+					msp_output.write('Num peaks: ' + str(numpeaks) + '\n')
+
+					for i in rankedpeaklist:
+						msp_output.write(i)
+
+					msp_output.write('\n')
+			msp_output.close()
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
 
 
 #peak intensity prediction without spectrum file (under construction)
