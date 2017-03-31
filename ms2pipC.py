@@ -251,43 +251,40 @@ def main():
 		
 		
 		
-		
-		
-		
-		
-		
 		#Next code can be used to write a minimal msp file for the Quickmod spectral library search engine
 		msp = True # prevent writing big msp files
-		
+		progress = 0
 		
 		if msp:
 			sys.stdout.write('\nwriting msp file...\n')
 			msp_output = open(args.pep_file +'_predictions.msp', 'w+')
+			from pyteomics import mass
+			import re
 
 			for sp in all_preds.spec_id.unique():
 				sequence = data.loc[int(sp)-1, "peptide"]
 				tmp = all_preds[all_preds.spec_id == sp]
 				tmp = tmp.sort_values('mz')
 				msp_output.write('Name: ' + sequence + "/" + str(int(tmp.charge[0])) + '\n')
-				from pyteomics import mass
-				msp_output.write('MW: %f\n' % (mass.calculate_mass(sequence=sequence)))
+				pepmass = mass.calculate_mass(sequence=sequence)
+				#print ("printing type pepmass")
+				#print type(pepmass)
+				msp_output.write('MW: ' + str(pepmass) + '\n')
 				msp_output.write('Comment: ')
 
 				for i in data.loc[int(sp)-1:int(sp)-1,"modifications"]:
 					pipes = 0
-					if str(i) == "nan":
-						pipes=0
-					else:
+					if str(i) != "nan":
 						for j in i:
 							if j == "|":
 								pipes += 1
+
+
 					if pipes == 0:
-						modamount=0
+						modamount = 0
 					else:
 						pipes += 1
-						modamount=pipes/2
-
-						import re
+						modamount = pipes/2
 
 						modplace_compile = re.compile("\d+")
 						modplace_findall = modplace_compile.findall(str(i))
@@ -299,6 +296,10 @@ def main():
 						modtype = modtype_findall
 
 					mods = "Mods=%d" % (modamount)
+
+
+
+
 
 					for i in range(modamount):
 						mods += "/"
@@ -315,10 +316,9 @@ def main():
 							mods += "Oxidation"
 
 					msp_output.write(mods)
-					msp_output.write(" Parent=" +  str(mass.calculate_mass(sequence=sequence)) + '\n')
+					msp_output.write(" Parent=" +  str(pepmass) + '\n')
 					numpeaks = 0
 					spectralpeaks = []
-
 					normalizedpeaks = []
 
 					for i in range(len(tmp)):
@@ -336,11 +336,10 @@ def main():
 
 					for i in range(len(tmp)):
 						numpeaks += 1
-						spectralpeaks.append(str(tmp["mz"][i]) + '\t' + str(rescaledpeaks[i]) + "\t" + "\"?\"" + "\n")
+						spectralpeaks.append(str(tmp["mz"][i]) + '\t' + str(rescaledpeaks[i]) + '\t"?"\n')
 
 					peakonly_list = []
 
-					import re
 					compile_peak = re.compile("\d+[.]\d+")
 
 					for i in spectralpeaks:
@@ -365,11 +364,6 @@ def main():
 
 					msp_output.write('\n')
 			msp_output.close()
-		
-		
-		
-		
-		
 		
 		
 		
