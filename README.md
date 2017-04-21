@@ -36,9 +36,15 @@ optional arguments:
   -h, --help      show this help message and exit
   -c FILE         config file
   -s FILE         .mgf MS2 spectrum file (optional)
-  -w FILE         write feature vectors to FILE.ext (.pkl or .h5) (optional)
-  -c INT          number of cpu's to use
+  -w FILE         write feature vectors to FILE.pkl (optional)
+  -i              iTRAQ models
+  -p              phospho models
+  -m INT          number of cpu's to use
 ```
+
+The `-i` flag makes ms2pipC use the NIST iTRAQ4 models (HCD onnly).
+
+The `-i` flag in combination with the `-p` flag makes ms2pipC use the NIST iTRAQ4 phospho models (HCD onnly).
 
 ### configfile (-c option)
 
@@ -47,12 +53,12 @@ Several ms2pipC options need to be set in this configfile.
 The models that should be used are set as `frag_method=X` where X is either `CID` or `HCD`.
 The fragment ion error tolerance is set as `frag_error=X` where is X is the tolerance in Da.
 
-PTMs (see further) are set as `ptm=X,Y,Z` for each internal PTM where X is a string that represents 
-the PTM, Y is the difference in Da associated with the PTM and Z is the amino 
-acid that is modified by the PTM. N-terminal modifications are specified as `nterm=X,Y` 
-where X is gain a string that represents the PTM, Y is again the difference in Da associated with the PTM.
-Similarly, c-terminal modifications are specified as `cterm=X,Y` 
-where X is gain a string that represents the PTM, Y is again the difference in Da associated with the PTM.
+PTMs (see further) are set as `ptm=X,Y,o,Z` for each internal PTM where X is a string that represents 
+the PTM, Y is the difference in Da associated with the PTM, o is a field only used by Omega (can be any value) and Z is the amino 
+acid that is modified by the PTM. N-terminal modifications are specified as `nterm=X,Y,o` 
+where X is again a string that represents the PTM, o is a field only used by Omega (can be any value), and Y is again the difference in Da associated with the PTM.
+Similarly, c-terminal modifications are specified as `cterm=X,Y,o` 
+where X is again a string that represents the PTM, o is a field only used by Omega (can be any value), and Y is again the difference in Da associated with the PTM.
 
 ### Getting predictions from peptide file
 

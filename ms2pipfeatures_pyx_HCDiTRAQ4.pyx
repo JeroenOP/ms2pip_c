@@ -2,7 +2,7 @@ import sys
 import numpy as np
 cimport numpy as np
 
-cdef extern from "ms2pipfeatures_c_HCD.c":
+cdef extern from "ms2pipfeatures_c_HCDiTRAQ4.c":
 	#uncomment for Omega
 	#void init(char* amino_masses_fname, char* modifications_fname, char* modifications_fname_sptm)
 	void c_ms2pip_init(char* amino_masses_fname)

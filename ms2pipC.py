@@ -30,9 +30,9 @@ def main():
 					 help='.mgf MS2 spectrum file (optional)')
 	parser.add_argument('-w', metavar='FILE',action="store", dest='vector_file',
 					 help='write feature vectors to FILE.pkl (optional)')
- 	parser.add_argument('-i','--iTRAQ', metavar='INT', action="store", dest='itraq', 
-					 help='enable iTRAQ {4,6,8}')
-	parser.add_argument('-p', metavar='INT',action="store", dest='num_cpu',default='23',
+ 	parser.add_argument('-i', action="store_true", default=False, help='iTRAQ models')
+ 	parser.add_argument('-p', action="store_true", default = False, help='phospho models')
+	parser.add_argument('-m', metavar='INT',action="store", dest='num_cpu',default='23',
 					 help="number of cpu's to use")
 
 	args = parser.parse_args()
@@ -54,13 +54,21 @@ def main():
 	with open(args.c) as f:
 		for row in f:
 			if row.startswith("ptm="): numptms+=1
+			if row.startswith("sptm="): numptms+=1
 	fa.write("%i\n"%numptms)
-	pos = 19 #modified amino acids have numbers starting at 19
+	pos = 38 #modified amino acids have numbers starting at 38 (mutations -> omega)
+	with open(args.c) as f:
+		for row in f:
+			if row.startswith("sptm="):
+				l=row.rstrip().split('=')[1].split(',')
+				fa.write("%f\n"%(float(l[1])+masses[a_map[l[3]]]))
+				PTMmap[l[0]] = pos
+				pos+=1
 	with open(args.c) as f:
 		for row in f:
 			if row.startswith("ptm="):
 				l=row.rstrip().split('=')[1].split(',')
-				fa.write("%f\n"%(float(l[1])+masses[a_map[l[2]]]))
+				fa.write("%f\n"%(float(l[1])+masses[a_map[l[3]]]))
 				PTMmap[l[0]] = pos
 				pos+=1
 			if row.startswith("nterm="):
@@ -78,14 +86,22 @@ def main():
 
 	if fragmethod == "CID":
 		import ms2pipfeatures_pyx_CID as ms2pipfeatures_pyx
+		print "using CID models..."
 	elif fragmethod == "HCD":
-		import ms2pipfeatures_pyx_HCD as ms2pipfeatures_pyx
+		if args.i:
+			if args.p:
+				import ms2pipfeatures_pyx_HCDiTRAQ4phospho as ms2pipfeatures_pyx
+				print "using HCD iTRAQ phospho models..."
+			else:
+				import ms2pipfeatures_pyx_HCDiTRAQ4 as ms2pipfeatures_pyx
+				print "using HCD iTRAQ pmodels..."
+		else:
+			import ms2pipfeatures_pyx_HCD as ms2pipfeatures_pyx
+			print "using HCD..."
 	else:
 		print "Unknown fragmentation method in configfile: %s"%fragmethod
 		exit(1)
-		
-	print "using %s models..."%fragmethod
-	
+			
 	ms2pipfeatures_pyx.ms2pip_init(fa.name)
 
 	# read peptide information
@@ -121,6 +137,7 @@ def main():
 			#select titles for this worker
 			tmp = titles[i*num_spectra_per_cpu:(i+1)*num_spectra_per_cpu]
 			# this commented part of code can be used for debugging by avoiding parallel processing
+			sys.stderr.write('ok')
 			#process_spectra(i,args, data[data.spec_id.isin(tmp)],PTMmap,Ntermmap,Ctermmap,fragmethod,fragerror)
 			#send worker to myPool
 			results.append(myPool.apply_async(process_spectra,args=(
@@ -205,10 +222,11 @@ def main():
 			#select titles for this worker			
 			tmp = titles[i*num_pep_per_cpu:(i+1)*num_pep_per_cpu]
 			"""
-			process_peptides(i,data[data.spec_id.isin(tmp)],PTMmap,Ntermmap,Ctermmap,fragmethod)
+			process_peptides(i,args,data[data.spec_id.isin(tmp)],PTMmap,Ntermmap,Ctermmap,fragmethod)
 			"""
 			results.append(myPool.apply_async(process_peptides,args=(
 										i,
+										args,
 										data[data.spec_id.isin(tmp)],
 										PTMmap,Ntermmap,Ctermmap,fragmethod
 										)))
@@ -217,6 +235,7 @@ def main():
 		tmp = titles[i*num_pep_per_cpu:]
 		results.append(myPool.apply_async(process_peptides,args=(
 								i,
+								args,
 								data[data.spec_id.isin(tmp)],
 								PTMmap,Ntermmap,Ctermmap,fragmethod
 								)))
@@ -251,7 +270,7 @@ def main():
 
 
 #peak intensity prediction without spectrum file (under construction)
-def process_peptides(worker_num,data,PTMmap,Ntermmap,Ctermmap,fragmethod):
+def process_peptides(worker_num,args,data,PTMmap,Ntermmap,Ctermmap,fragmethod):
 	"""
 	Read the PEPREC file and predict spectra.
 	"""
@@ -259,7 +278,16 @@ def process_peptides(worker_num,data,PTMmap,Ntermmap,Ctermmap,fragmethod):
 	if fragmethod == "CID":
 		import ms2pipfeatures_pyx_CID as ms2pipfeatures_pyx
 	elif fragmethod == "HCD":
-		import ms2pipfeatures_pyx_HCD as ms2pipfeatures_pyx
+		if args.i:
+			if args.p:
+				import ms2pipfeatures_pyx_HCDiTRAQ4phospho as ms2pipfeatures_pyx
+			else:
+				import ms2pipfeatures_pyx_HCDiTRAQ4 as ms2pipfeatures_pyx
+		else:
+			import ms2pipfeatures_pyx_HCD as ms2pipfeatures_pyx
+	else:
+		print "Unknown fragmentation method in configfile: %s"%fragmethod
+		exit(1)
 
 	# transform pandas datastructure into dictionary for easy access
 	specdict = data[['spec_id','peptide','modifications','charge']].set_index('spec_id').to_dict()
@@ -268,7 +296,7 @@ def process_peptides(worker_num,data,PTMmap,Ntermmap,Ctermmap,fragmethod):
 	charges = specdict['charge']
 
 	final_result = pd.DataFrame(columns=['peplen','charge','ion','mz', 'ionnumber', 'prediction', 'spec_id'])
-	sp_count = 0
+	pcount = 0
 	total = len(peptides)
 
 	for pepid in peptides:
@@ -326,10 +354,9 @@ def process_peptides(worker_num,data,PTMmap,Ntermmap,Ctermmap,fragmethod):
 		tmp['prediction'] = resultB + resultY
 		tmp['spec_id'] = [pepid]*len(tmp)
 		final_result = final_result.append(tmp)
-		sp_count+=1
-		if int(((1.0 * sp_count)/total) * 100) % 20 == 0: 
-			sys.stderr.write('w' + str(worker_num) + '( ' + str(sp_count) + ') ')
-
+		pcount += 1
+		if (pcount % 500) == 0:
+			sys.stderr.write('w' + str(worker_num) + '(' + str(pcount) + ') ')
 	return final_result
 
 # peak intensity prediction with spectrum file (for evaluation) OR feature extraction
@@ -338,7 +365,16 @@ def process_spectra(worker_num,args,data, PTMmap,Ntermmap,Ctermmap,fragmethod,fr
 	if fragmethod == "CID":
 		import ms2pipfeatures_pyx_CID as ms2pipfeatures_pyx
 	elif fragmethod == "HCD":
-		import ms2pipfeatures_pyx_HCD as ms2pipfeatures_pyx
+		if args.i:
+			if args.p:
+				import ms2pipfeatures_pyx_HCDiTRAQ4phospho as ms2pipfeatures_pyx
+			else:
+				import ms2pipfeatures_pyx_HCDiTRAQ4 as ms2pipfeatures_pyx
+		else:
+			import ms2pipfeatures_pyx_HCD as ms2pipfeatures_pyx
+	else:
+		print "Unknown fragmentation method in configfile: %s"%fragmethod
+		exit(1)
 
 	# transform pandas datastructure into dictionary for easy access
 	specdict = data[['spec_id','peptide','modifications']].set_index('spec_id').to_dict()
@@ -357,6 +393,8 @@ def process_spectra(worker_num,args,data, PTMmap,Ntermmap,Ctermmap,fragmethod,fr
 	dataresult['ionnumber'] = dataresult['ionnumber'].astype(np.uint8)
 	dataresult['target'] = dataresult['target'].astype(np.float32)					
 	dataresult['prediction'] = dataresult['prediction'].astype(np.float32)					
+		
+	sys.stderr.write('here')
 		
 	title = ""
 	charge = 0
@@ -401,7 +439,7 @@ def process_spectra(worker_num,args,data, PTMmap,Ntermmap,Ctermmap,fragmethod,fr
 			elif row[:8] == "END IONS":
 				#process
 				if not title in peptides: continue
-
+				#sys.stderr.write('.')
 				#with counter.get_lock():
 				#	counter.value += 1
 				#sys.stderr.write("%i ",counter.value)
@@ -440,10 +478,10 @@ def process_spectra(worker_num,args,data, PTMmap,Ntermmap,Ctermmap,fragmethod,fr
 							else:
 								modpeptide[int(l[i])-1] = PTMmap[tl[:-1]]
 
-				if args.itraq:
+				if args.i:
 					#remove reporter ionsi
 					for mi,mp in enumerate(msms):
-						if (mp >= 114.09) & (mp <= 117.2):
+						if (mp >= 113) & (mp <= 118):
 							peaks[mi]=0
 
 				# normalize and convert MS2 peaks
